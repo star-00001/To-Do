@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart To-Do List</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .fade-in {
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-blue-100 to-purple-100 min-h-screen flex items-center justify-center p-4 sm:p-6">
+  <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-xl w-full max-w-3xl space-y-6">
+    <div class="text-center">
+      <h1 class="text-2xl sm:text-3xl font-bold mb-1">✅ Smart To-Do List</h1>
+      <p class="text-gray-600 text-sm sm:text-base" id="liveClock"></p>
+    </div>
+
+    <!-- Input -->
+    <div class="flex flex-col sm:flex-row gap-2">
+      <input id="taskInput" type="text" placeholder="Enter your task"
+             class="flex-grow p-2 border rounded-md focus:outline-none focus:ring focus:ring-blue-300" />
+      <button onclick="addTask()"
+              class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">Add</button>
+    </div>
+
+    <!-- Task Stats -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 text-center font-medium text-sm text-white">
+      <div class="bg-yellow-400 py-2 rounded">🕐 Pending: <span id="pendingCount">0</span></div>
+      <div class="bg-green-500 py-2 rounded">✅ Completed: <span id="completedCount">0</span></div>
+      <div class="bg-red-400 py-2 rounded col-span-2 sm:col-span-1">🗑️ Deleted: <span id="deletedCount">0</span></div>
+    </div>
+
+    <!-- Task List -->
+    <ul id="taskList" class="space-y-2"></ul>
+
+    <!-- Task Table -->
+    <div class="overflow-x-auto mt-6">
+      <h2 class="text-lg font-semibold mb-2">📅 Today's Task Summary</h2>
+      <table class="min-w-full text-sm border border-gray-300 rounded shadow-sm">
+        <thead class="bg-gray-100 text-gray-700">
+          <tr>
+            <th class="px-4 py-2 border text-left">Task</th>
+            <th class="px-4 py-2 border text-left">Status</th>
+          </tr>
+        </thead>
+        <tbody id="taskTableBody" class="text-gray-700"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const SHEETS_URL = "https://script.google.com/macros/s/AKfycbwLEUELccyuuRl1etAX5Uemp8mRNA84mvIJQmKRUauGrhQfizlm_xYY3q1KrOByx2qBQA/exec";
+    let tasks = [];
+    let allTasks = [];
+
+    function formatDateTime(isoString) {
+      const date = new Date(isoString);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    }
+
+    function getDateTime() {
+      return formatDateTime(new Date().toISOString());
+    }
+
+    function addTask() {
+      const input = document.getElementById("taskInput");
+      const text = input.value.trim();
+      if (!text) return;
+
+      const datetime = getDateTime();
+      const task = { text, datetime };
+      tasks.push(task);
+      allTasks.push({ ...task, status: "Pending" });
+      input.value = "";
+
+      renderTasks();
+      renderTaskTable();
+      updateCounters();
+      sendToGoogleSheets(task.text, "Pending", datetime);
+    }
+
+    function completeTask(index) {
+      const task = tasks[index];
+      const currentDatetime = getDateTime();
+      sendToGoogleSheets(task.text, "Completed", currentDatetime);
+      allTasks.push({ text: task.text, status: "Completed", datetime: currentDatetime });
+      tasks.splice(index, 1);
+      renderTasks();
+      renderTaskTable();
+      updateCounters();
+    }
+
+    function deleteTask(index) {
+      const task = tasks[index];
+      const datetime = getDateTime();
+      sendToGoogleSheets(task.text, "Deleted", datetime);
+      allTasks.push({ text: task.text, status: "Deleted", datetime });
+      tasks.splice(index, 1);
+      renderTasks();
+      renderTaskTable();
+      updateCounters();
+    }
+
+    function renderTasks() {
+      const list = document.getElementById("taskList");
+      list.innerHTML = "";
+
+      tasks.forEach((task, i) => {
+        const li = document.createElement("li");
+        li.className = "fade-in flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gray-200 p-3 rounded";
+
+        const info = document.createElement("div");
+        info.className = "flex-grow mb-2 sm:mb-0 text-sm";
+        info.innerHTML = `
+          <span class="font-medium text-base break-words">${task.text}</span><br>
+          <small class="text-xs text-gray-600">${task.datetime}</small>
+        `;
+
+        const btnGroup = document.createElement("div");
+        btnGroup.className = "flex flex-wrap gap-2";
+
+        const completeBtn = document.createElement("button");
+        completeBtn.textContent = "✔️ Complete";
+        completeBtn.className = "bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 text-sm";
+        completeBtn.onclick = () => completeTask(i);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "🗑️";
+        deleteBtn.className = "text-red-500 hover:text-red-700 text-lg";
+        deleteBtn.onclick = () => deleteTask(i);
+
+        btnGroup.appendChild(completeBtn);
+        btnGroup.appendChild(deleteBtn);
+
+        li.appendChild(info);
+        li.appendChild(btnGroup);
+        list.appendChild(li);
+      });
+    }
+
+    function renderTaskTable() {
+  const today = new Date().toISOString().split("T")[0];
+  const tbody = document.getElementById("taskTableBody");
+  tbody.innerHTML = "";
+
+  const taskStatusMap = new Map();
+
+  allTasks.forEach(task => {
+    if (task.datetime.startsWith(today)) {
+      taskStatusMap.set(task.text, task.status); // Overwrites to keep the latest
+    }
+  });
+
+  taskStatusMap.forEach((status, text) => {
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-gray-50";
+    tr.innerHTML = `
+      <td class="px-4 py-2 border break-words max-w-xs">${text}</td>
+      <td class="px-4 py-2 border">${status}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function updateCounters() {
+  const taskStatusMap = new Map();
+
+  allTasks.forEach(task => {
+    taskStatusMap.set(task.text, task.status); // Latest status wins
+  });
+
+  let pending = 0, completed = 0, deleted = 0;
+  taskStatusMap.forEach(status => {
+    if (status === "Pending") pending++;
+    else if (status === "Completed") completed++;
+    else if (status === "Deleted") deleted++;
+  });
+
+  document.getElementById("pendingCount").textContent = pending;
+  document.getElementById("completedCount").textContent = completed;
+  document.getElementById("deletedCount").textContent = deleted;
+}
+
+    function sendToGoogleSheets(taskText, status, datetime) {
+      fetch(SHEETS_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: taskText, status, datetime })
+      }).catch(error => console.error("Error sending to Google Sheets:", error));
+    }
+
+    // Live Clock
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById("liveClock").textContent = now.toLocaleString();
+    }, 1000);
+
+    // On Load Fetch Tasks
+    window.onload = () => {
+      fetch(SHEETS_URL)
+        .then(res => res.json())
+        .then(data => {
+          allTasks = data.map(t => {
+            t.datetime = formatDateTime(t.datetime);
+            return t;
+          });
+
+          tasks = allTasks.filter(t => t.status === "Pending");
+          renderTasks();
+          renderTaskTable();
+          updateCounters();
+        })
+        .catch(error => console.error("Error fetching tasks:", error));
+    };
+  </script>
+</body>
+</html>
